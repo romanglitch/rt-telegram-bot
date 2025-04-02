@@ -1,55 +1,49 @@
-const playwright = require('playwright');
+const { chromium } = require('playwright');
 const TelegramBot = require('node-telegram-bot-api');
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
+const BOT = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {polling: true});
 
-const bot = new TelegramBot(token, {polling: true});
-
-bot.onText('/start', async (msg, match) => {
-    const chatId = msg.chat.id;
-    await bot.sendMessage(chatId, 'Что бы узнать количество дней до блокировки используйте команду /check')
+BOT.onText('/start', async (msg) => {
+    const {chat} = msg
+    await BOT.sendMessage(chat.id, 'Что бы узнать количество дней до блокировки используйте команду /check')
 });
 
-bot.onText('/check', async (msg, match) => {
-    const chatId = msg.chat.id;
+BOT.onText('/check', async (msg) => {
+    const {chat} = msg
 
-    const browser = await playwright.chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    await BOT.sendMessage(chat.id, `Пожалуйста подождите загружаю информацию...`)
 
-    let accountData = {}
+    const browser = await chromium.launchPersistentContext('./browser_data', {headless: true});
+    const page = await browser.newPage()
 
-    await bot.sendMessage(chatId, 'Пожалуйста подождите загружаю информацию...')
+    await page.goto('https://my.rt.ru/')
 
-    try {
-        await page.goto(process.env.RT_LOGIN_URL);
+    page.once('load', async () => {
+        if (page.url() !== 'https://my.rt.ru/') {
+            try {
+                await page.fill('#username', process.env.RT_LOGIN);
+                await page.fill('#password', process.env.RT_PASSWORD);
+                await page.click('#kc-login');
+                await page.waitForURL('https://my.rt.ru/')
+            } catch (e) {
+                console.log('Ошибка при выполнении авторизации')
+            }
+        }
+    })
 
-        await page.fill('#username', process.env.RT_LOGIN);
+    page.on('response', async (response) => {
+        if (response.url() === 'https://my.rt.ru/api/lk/account/cabinet') {
+            try {
+                const { accountInfo } = await response.json();
+                const { daysToLock } = accountInfo
 
-        await page.fill('#password', process.env.RT_PASSWORD);
-
-        await page.click('#kc-login');
-
-        await page.goto(process.env.RT_MAIN_URL)
-
-        await page.waitForSelector('#account_info_block');
-
-        const response = await page.waitForResponse(process.env.RT_API_URL, { timeout: 0 });
-
-        const resBody = await response.body();
-
-        accountData = await JSON.parse(resBody)
-    } catch (error) {
-        console.error('Произошла ошибка:', error);
-        await bot.sendMessage(chatId, `Произошла ошибка:`, error)
-    } finally {
-        const { accountInfo } = accountData
-
-        await bot.sendMessage(chatId, `- Дней до блокировки: ${accountInfo.daysToLock}`)
-        await bot.sendMessage(chatId, `- Повторить запрос: /check`)
-
-        await browser.close()
-    }
+                await BOT.sendMessage(chat.id, `- Дней до блокировки: ${daysToLock}`)
+            } catch (e) {
+                await BOT.sendMessage(chat.id, `- Ошибка при получении данных`)
+            } finally {
+                await BOT.sendMessage(chat.id, `- Повторить запрос: /check`)
+                await browser.close()
+            }
+        }
+    });
 });
-
-console.log('Бот запущен!')
