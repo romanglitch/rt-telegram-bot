@@ -2,9 +2,10 @@
   "name": "rt-telegram-bot",
   "version": "1.0.0",
   "description": "",
-  "main": "bot.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node --env-file=.env bot.js"
+    "build": "echo \"Build command\"",
+    "start": "node --env-file=.env index.js"
   },
   "repository": {
     "type": "git",
