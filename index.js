@@ -55,3 +55,5 @@ Index.onText(/\/check/, async (msg) => {
         }
     });
 });
+
+console.log('Бот запущен');
