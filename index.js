@@ -15,7 +15,7 @@ tgBot.onText(/\/check/, async (msg) => {
     await tgBot.sendMessage(chat.id, `Пожалуйста подождите загружаю информацию...`);
     console.log('Выполняется запрос данных...');
 
-    const browser = await chromium.launchPersistentContext('./browser_data', {headless: true});
+    const browser = await chromium.launchPersistentContext('./browser_data', {headless: false});
     const page = await browser.newPage();
 
     await page.goto('https://my.rt.ru/');
@@ -23,6 +23,7 @@ tgBot.onText(/\/check/, async (msg) => {
     page.once('load', async () => {
         if (page.url() !== 'https://my.rt.ru/') {
             try {
+                await page.click('#standard_auth_btn');
                 await page.fill('#username', process.env.RT_LOGIN);
                 await page.fill('#password', process.env.RT_PASSWORD);
                 await page.click('#kc-login');
@@ -85,7 +86,7 @@ tgBot.onText(/\/check/, async (msg) => {
                 console.log('Ошибка при получении данных');
             } finally {
                 await tgBot.sendMessage(chat.id, `- Повторить запрос: /check`)
-                await browser.close()
+                // await browser.close()
                 console.log('Запрос завершен');
             }
         }
