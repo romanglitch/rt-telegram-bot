@@ -40,7 +40,7 @@ tgBot.onText(/\/check/, async (msg) => {
 
     console.log('Выполняется запрос данных...');
 
-    const browser = await chromium.launchPersistentContext('./browser_data', {headless: false});
+    const browser = await chromium.launchPersistentContext('./browser_data', {headless: true});
     const page = await browser.newPage();
 
     await page.goto('https://my.rt.ru/');
