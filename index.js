@@ -3,19 +3,44 @@ const TelegramBot = require('node-telegram-bot-api');
 
 const tgBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {polling: true});
 
+const msgIdsToDelete = [];
+const deleteMessages = async (chatId, messagesToDelete) => {
+    for (const msgId of messagesToDelete) {
+        try {
+            await tgBot.deleteMessage(chatId, msgId);
+        } catch (e) {
+            console.log('Не удалось удалить сообщение:', msgId);
+        }
+    }
+
+    messagesToDelete.length = 0;
+
+    console.log('Сообщения удалены')
+}
+
 tgBot.onText(/\/start/, async (msg) => {
     const {chat} = msg;
-    await tgBot.sendMessage(chat.id, 'Что бы узнать количество дней до блокировки используйте команду /check');
+
+    await deleteMessages(chat.id, msgIdsToDelete)
+
+    const startMessage = await tgBot.sendMessage(chat.id, 'Что бы узнать количество дней до блокировки используйте команду /check');
+    msgIdsToDelete.push(startMessage.message_id)
+
     console.log('Пользователь ' + chat.id + ' запустил бота');
 });
 
 tgBot.onText(/\/check/, async (msg) => {
     const {chat} = msg;
 
-    await tgBot.sendMessage(chat.id, `Пожалуйста подождите загружаю информацию...`);
+    msgIdsToDelete.push(msg.message_id)
+    await deleteMessages(chat.id, msgIdsToDelete)
+
+    const loadingMsg = await tgBot.sendMessage(chat.id, `Пожалуйста подождите загружаю информацию...`);
+    msgIdsToDelete.push(loadingMsg.message_id);
+
     console.log('Выполняется запрос данных...');
 
-    const browser = await chromium.launchPersistentContext('./browser_data', {headless: true});
+    const browser = await chromium.launchPersistentContext('./browser_data', {headless: false});
     const page = await browser.newPage();
 
     await page.goto('https://my.rt.ru/');
@@ -36,18 +61,6 @@ tgBot.onText(/\/check/, async (msg) => {
         }
     });
 
-    // let TEST_RESP = {
-    //     _errors_validate: null,
-    //     AccountID: '3328899',
-    //     balance: 770.63,
-    //     credit: 0,
-    //     daysToLock: 14,
-    //     dateToLock: '2025-06-18',
-    //     MinPayment: 856.26,
-    //     payment: 856.26,
-    //     TommorowMonthPay: 1626.89
-    // }
-
     function formatCurrency(amount) {
         const number = parseFloat(amount).toFixed(0);
         const formatted = number.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -59,7 +72,7 @@ tgBot.onText(/\/check/, async (msg) => {
             '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
             'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
         ];
-        // dateToLock - строка '2025-06-18'
+
         const [year, month, day] = dateToLock.split('-').map(Number);
         const lockDate = new Date(year, month - 1, day);
         lockDate.setDate(lockDate.getDate() + daysToLock);
@@ -76,17 +89,22 @@ tgBot.onText(/\/check/, async (msg) => {
                 const { accountInfo } = await response.json();
                 const { dateToLock, daysToLock, balance, MinPayment } = accountInfo
 
-                await tgBot.sendMessage(chat.id, `- Дней до блокировки: ${daysToLock} (${getLockDate(dateToLock, daysToLock)})`)
-                await tgBot.sendMessage(chat.id, `- Баланс: ${formatCurrency(balance)}`)
-                await tgBot.sendMessage(chat.id, `- Минимальный платеж: ${formatCurrency(MinPayment)}`)
+                await deleteMessages(chat.id, msgIdsToDelete)
+
+                const infoMessage = await tgBot.sendMessage(chat.id, `📊 Информация о счёте:\n\n` +
+                    `⏳ Дней до блокировки: ${daysToLock} (${getLockDate(dateToLock, daysToLock)})\n` +
+                    `💰 Баланс: ${formatCurrency(balance)}\n` +
+                    `💳 Минимальный платеж: ${formatCurrency(MinPayment)}\n\n` +
+                    `🔄 Повторить запрос: /check`);
+
+                msgIdsToDelete.push(infoMessage.message_id)
 
                 console.log(`Дней до блокировки: ${daysToLock}`);
             } catch (e) {
-                await tgBot.sendMessage(chat.id, `- Ошибка при получении данных`)
+                await tgBot.sendMessage(chat.id, `❌ Ошибка при получении данных\n\n🔄 Повторить запрос: /check`);
                 console.log('Ошибка при получении данных');
             } finally {
-                await tgBot.sendMessage(chat.id, `- Повторить запрос: /check`)
-                // await browser.close()
+                await browser.close()
                 console.log('Запрос завершен');
             }
         }
